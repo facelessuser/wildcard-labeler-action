@@ -23,12 +23,12 @@ class Api:
     def __init__(self, token, user, repo):
         """Initialize."""
 
-        self.url = 'https://api.github.com/'
+        self.url = 'https://api.github.com'
         self.token = token
         self.user = user
         self.repo = repo
 
-    def _delete(self, command, timeout=60):
+    def _delete(self, command, timeout=60, expected=200):
         """Send a DELETE REST command."""
 
         if timeout == 0:
@@ -46,12 +46,12 @@ class Api:
                 timeout=timeout
             )
 
-            assert resp.status_code == 204
+            assert resp.status_code == expected
 
         except Exception:
-            raise RuntimeError('DELETE command failed: {}'.format(self.url + command))
+            raise RuntimeError('DELETE command failed: {}'.format(command))
 
-    def _patch(self, command, payload, timeout=60):
+    def _patch(self, command, payload, timeout=60, expected=200):
         """Send a PATCH REST command."""
 
         if timeout == 0:
@@ -74,12 +74,12 @@ class Api:
                 timeout=timeout
             )
 
-            assert resp.status_code == 200
+            assert resp.status_code == expected
 
         except Exception:
-            raise RuntimeError('PATCH command failed: {}'.format(self.url + command))
+            raise RuntimeError('PATCH command failed: {}'.format(command))
 
-    def _post(self, command, payload, timeout=60):
+    def _post(self, command, payload, timeout=60, expected=200):
         """Send a POST REST command."""
 
         if timeout == 0:
@@ -102,10 +102,10 @@ class Api:
                 timeout=timeout
             )
 
-            assert resp.status_code == 201
+            assert resp.status_code == expected
 
         except Exception:
-            raise RuntimeError('POST command failed: {}'.format(self.url + command))
+            raise RuntimeError('POST command failed: {}'.format(command))
 
     def _get(self, command, timeout=60, pages=False):
         """Send a GET REST request."""
@@ -139,7 +139,39 @@ class Api:
                     yield data
 
             except Exception:
+                import traceback
+                print(traceback.format_exc())
                 raise RuntimeError('GET command failed: {}'.format(command))
+
+    def get_labels(self):
+        """Get labels."""
+
+        return list(self._get('/'.join([self.url, 'repos', self.user, self.repo, 'labels']), pages=True))
+
+    def create_label(self, name, color, description):
+        """Create label."""
+
+        self._post(
+            '/'.join([self.url, 'repos', self.user, self.repo, 'labels']),
+            {'name': name, 'color': color, 'description': description},
+            201
+        )
+
+    def add_labels(self, number, labels):
+        """Add labels."""
+
+        self._post(
+            '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels']),
+            {'labels': list(labels)}
+        )
+
+    def remove_labels(self, number, labels):
+        """Remove labels."""
+
+        for label in labels:
+            self._delete(
+                '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels', label])
+            )
 
     def get(self, url):
         """Get the url."""
@@ -155,9 +187,20 @@ class GhLabeler:
 
         self.debug = debug
         self.git = git
+        self._setup_flags(config)
+        self.labels = config['labels']
         with codecs.open(os.getenv('GITHUB_EVENT_PATH'), 'r', encoding='utf-8') as f:
             workflow = json.loads(f.read())
         self.workflow = workflow
+
+    def _setup_flags(self, config):
+        """Setup flags."""
+
+        self.flags = glob.GLOBSTAR | glob.DOTGLOB | glob.NEGATE | glob.SPLIT
+        if config.get('brace_expansion', False):
+            self.flags |= glob.BRACE
+        if config.get('extended_glob', False):
+            self.flags |= glob.EXTGLOB | glob.MINUSNEGATE
 
     def _validate_str(self, name):
         """Validate name."""
@@ -179,12 +222,43 @@ class GhLabeler:
             files.append(file['filename'])
         return files
 
+    def _update_issue_labels(self, add_labels, remove_labels):
+        """Update issue labels."""
+
+        number = str(self.workflow['number'])
+        labels = set([l['name'].lower() for l in self.workflow['pull_request']['labels']])
+
+        if remove_labels:
+            remove = labels - remove_labels
+            if remove:
+                self.git.remove_labels(number, remove)
+        if add_labels:
+            # repo_labels = set([l['name'].lower() for l in self.git.get_labels()])
+            # missing = add_labels - repo_labels
+            # for m in missing:
+            #     self.git.create_label(m, '00ff00', '')
+            self.git.add_labels(number, add_labels)
+
     def apply(self):
         """Sync labels."""
 
-        print(json.dumps(self.workflow))
+        managed_labels = set()
+        add_labels = set()
+
         for file in self._get_changed_files():
-            print(file)
+            for label in self.labels:
+                managed_labels.add(label['name'].lower())
+                match = False
+                for pattern in label['patterns']:
+                    if glob.globmatch(file, pattern, flags=self.flags):
+                        match = True
+                        break
+                if match:
+                    add_labels.add(label['name'].lower())
+                    break
+
+        remove_labels = managed_labels - add_labels
+        self._update_issue_labels(add_labels, remove_labels)
 
 
 def main():
