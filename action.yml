@@ -1,0 +1,22 @@
+name: 'GitHub Wildcard Labeler'
+author: 'Isaac Muse'
+description: 'Labels pull requests based on the whether the changed file paths match a set of wildcard patterns'
+inputs:
+  token:
+    description: 'GitHub access token for using the REST API'
+    required: true
+    default: ''
+  file:
+    description: 'YAML file containing the configuration. Default is .github/labeler.yml'
+    required: false
+    default: '.github/labeler.yml'
+  debug:
+    description: 'Debug will run the label syncer without applying changes. Set to "enable" to enable.'
+    required: false
+    default: 'disable'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+branding:
+  icon: 'tag'
+  color: 'green'

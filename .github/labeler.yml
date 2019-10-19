@@ -1,0 +1,8 @@
+labels:
+  - name: python
+    patterns:
+    - '**/*.py'
+
+  - name: configs
+    patterns:
+    - '**/*.yml'
