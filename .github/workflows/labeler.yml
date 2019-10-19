@@ -7,6 +7,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Sync labels
-      uses: facelessuser/wildcard-labeler-action@feature/code
+      uses: facelessuser/wildcard-labeler-action@master
       with:
         token: "${{ secrets.GITHUB_TOKEN }}"

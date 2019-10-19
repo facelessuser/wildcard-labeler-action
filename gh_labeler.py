@@ -150,7 +150,6 @@ class Api:
         return list(
             self._get(
                 '/'.join([self.url, 'repos', self.user, self.repo, 'contents', file]),
-                payload={'ref': 'feature/code'},
                 headers={'Accept': 'application/vnd.github.v3.raw'},
                 text=True
             )
