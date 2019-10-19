@@ -204,7 +204,7 @@ class GhLabeler:
         self.workflow = workflow
         config = self._get_config(config)
         self._setup_flags(config)
-        self.labels = config['labels']
+        self.labels = config['rules']
 
     def _get_config(self, config):
         """Get config."""
@@ -269,27 +269,29 @@ class GhLabeler:
 
         for file in self._get_changed_files():
             for label in self.labels:
-                name = label['name']
-                low = name.lower()
+                names = label['labels']
+                lows = [n.lower() for n in names]
                 match = False
                 for pattern in label['patterns']:
                     if glob.globmatch(file, pattern, flags=self.flags):
                         match = True
                         break
                 if match:
-                    if low not in add_labels:
-                        add_labels.add(name)
-                        i_add_labels.add(low)
+                    for index, low in enumerate(lows):
+                        if low not in i_add_labels:
+                            add_labels.add(names[index])
+                            i_add_labels.add(low)
                     break
 
         remove_labels = set()
         i_remove_labels = set()
         for label in self.labels:
-            name = label['name']
-            low = name.lower()
-            if low not in i_add_labels and low not in i_remove_labels:
-                remove_labels.add(name)
-                i_remove_labels.add(low)
+            names = label['labels']
+            lows = [n.lower() for n in names]
+            for index, low in enumerate(lows):
+                if low not in i_add_labels and low not in i_remove_labels:
+                    remove_labels.add(names[index])
+                    i_remove_labels.add(low)
 
         self._update_issue_labels(add_labels, remove_labels)
 
