@@ -140,17 +140,16 @@ class Api:
                     yield data
 
             except Exception:
-                import traceback
-                print(traceback.format_exc())
                 raise RuntimeError('GET command failed: {}'.format(command))
 
-    def get_contents(self, file):
+    def get_contents(self, file, ref="master"):
         """Get contents."""
 
         return list(
             self._get(
-                '/'.join([self.url, 'repos', self.user, self.repo, 'contents', file]),
+                '/'.join([self.url, 'repos', self.user, self.repo, 'contents',  urllib.parse.quote(file)]),
                 headers={'Accept': 'application/vnd.github.v3.raw'},
+                payload={'ref': ref},
                 text=True
             )
         )[0]
@@ -180,7 +179,9 @@ class Api:
 
         for label in labels:
             self._delete(
-                '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels', label]),
+                '/'.join(
+                    [self.url, 'repos', self.user, self.repo, 'issues', number, 'labels',  urllib.parse.quote(label)]
+                ),
                 headers={'Accept': 'application/vnd.github.symmetra-preview+json'}
             )
 
@@ -198,18 +199,18 @@ class GhLabeler:
 
         self.debug = debug
         self.git = git
-        config = self._get_config(config)
-        self._setup_flags(config)
-        self.labels = config['labels']
         with codecs.open(os.getenv('GITHUB_EVENT_PATH'), 'r', encoding='utf-8') as f:
             workflow = json.loads(f.read())
         self.workflow = workflow
+        config = self._get_config(config)
+        self._setup_flags(config)
+        self.labels = config['labels']
 
     def _get_config(self, config):
         """Get config."""
 
         print('Reading labels from {}'.format(config))
-        return yaml.load(self.git.get_contents(config), Loader=Loader)
+        return yaml.load(self.git.get_contents(config, ref=os.getenv("GITHUB_SHA")), Loader=Loader)
 
     def _setup_flags(self, config):
         """Setup flags."""
