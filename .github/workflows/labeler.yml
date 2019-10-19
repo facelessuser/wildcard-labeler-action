@@ -1,12 +1,12 @@
-name: "Pull Request Labeler"
+name: "wildcard labeler"
 on:
 - pull_request
 
 jobs:
-  triage:
+  pull-labels:
     runs-on: ubuntu-latest
     steps:
-    - name: Sync labels
+    - name: Wildcard Labeler
       uses: facelessuser/wildcard-labeler-action@master
       with:
         token: "${{ secrets.GITHUB_TOKEN }}"

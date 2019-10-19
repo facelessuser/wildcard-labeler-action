@@ -1,8 +1,8 @@
-labels:
-  - name: python
+rules:
+  - labels: [python, code]
     patterns:
     - '**/*.py'
 
-  - name: configs
+  - labels: [configs]
     patterns:
     - '**/*.yml'
