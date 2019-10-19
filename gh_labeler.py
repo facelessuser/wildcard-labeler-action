@@ -140,8 +140,6 @@ class Api:
                     yield data
 
             except Exception:
-                import traceback
-                print(traceback.format_exc())
                 raise RuntimeError('GET command failed: {}'.format(command))
 
     def get_contents(self, file):
@@ -149,7 +147,7 @@ class Api:
 
         return list(
             self._get(
-                '/'.join([self.url, 'repos', self.user, self.repo, 'contents', file]),
+                '/'.join([self.url, 'repos', self.user, self.repo, 'contents',  urllib.parse.quote(file)]),
                 headers={'Accept': 'application/vnd.github.v3.raw'},
                 text=True
             )
@@ -180,7 +178,9 @@ class Api:
 
         for label in labels:
             self._delete(
-                '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels', label]),
+                '/'.join(
+                    [self.url, 'repos', self.user, self.repo, 'issues', number, 'labels',  urllib.parse.quote(label)]
+                ),
                 headers={'Accept': 'application/vnd.github.symmetra-preview+json'}
             )
 
