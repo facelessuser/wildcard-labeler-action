@@ -28,16 +28,16 @@ class Api:
         self.user = user
         self.repo = repo
 
-    def _delete(self, command, timeout=60, expected=200):
+    def _delete(self, command, timeout=60, expected=200, headers=None):
         """Send a DELETE REST command."""
 
         if timeout == 0:
             timeout = None
 
-        headers = {
-            'Authorization': 'token {}'.format(self.token),
-            'Accept': 'application/vnd.github.symmetra-preview+json'
-        }
+        if headers is None:
+            headers = {}
+
+        headers['Authorization'] = 'token {}'.format(self.token)
 
         try:
             resp = requests.delete(
@@ -51,16 +51,16 @@ class Api:
         except Exception:
             raise RuntimeError('DELETE command failed: {}'.format(command))
 
-    def _patch(self, command, payload, timeout=60, expected=200):
+    def _patch(self, command, payload, timeout=60, expected=200, headers=None):
         """Send a PATCH REST command."""
 
         if timeout == 0:
             timeout = None
 
-        headers = {
-            'Authorization': 'token {}'.format(self.token),
-            'Accept': 'application/vnd.github.symmetra-preview+json'
-        }
+        if headers is None:
+            headers = {}
+
+        headers['Authorization'] = 'token {}'.format(self.token)
 
         if payload is not None:
             payload = json.dumps(payload)
@@ -79,16 +79,16 @@ class Api:
         except Exception:
             raise RuntimeError('PATCH command failed: {}'.format(command))
 
-    def _post(self, command, payload, timeout=60, expected=200):
+    def _post(self, command, payload, timeout=60, expected=200, headers=None):
         """Send a POST REST command."""
 
         if timeout == 0:
             timeout = None
 
-        headers = {
-            'Authorization': 'token {}'.format(self.token),
-            'Accept': 'application/vnd.github.symmetra-preview+json'
-        }
+        if headers is None:
+            headers = {}
+
+        headers['Authorization'] = 'token {}'.format(self.token)
 
         if payload is not None:
             payload = json.dumps(payload)
@@ -107,16 +107,16 @@ class Api:
         except Exception:
             raise RuntimeError('POST command failed: {}'.format(command))
 
-    def _get(self, command, timeout=60, pages=False):
+    def _get(self, command, payload=None, timeout=60, pages=False, expected=200, headers=None, text=False):
         """Send a GET REST request."""
 
         if timeout == 0:
             timeout = None
 
-        headers = {
-            'Authorization': 'token {}'.format(self.token),
-            'Accept': 'application/vnd.github.symmetra-preview+json'
-        }
+        if headers is None:
+            headers = {}
+
+        headers['Authorization'] = 'token {}'.format(self.token)
 
         data = None
 
@@ -124,15 +124,16 @@ class Api:
             try:
                 resp = requests.get(
                     command,
+                    params=payload,
                     headers=headers,
                     timeout=timeout
                 )
 
-                assert resp.status_code == 200
+                assert resp.status_code == expected
 
                 command = resp.links.get('next', {}).get('url', '') if pages else ''
-                data = json.loads(resp.text)
-                if pages:
+                data = json.loads(resp.text) if not text else resp.text
+                if pages and not text:
                     for entry in data:
                         yield entry
                 else:
@@ -143,40 +144,51 @@ class Api:
                 print(traceback.format_exc())
                 raise RuntimeError('GET command failed: {}'.format(command))
 
-    def get_labels(self):
-        """Get labels."""
+    def get_contents(self, file):
+        """Get contents."""
 
-        return list(self._get('/'.join([self.url, 'repos', self.user, self.repo, 'labels']), pages=True))
+        return list(
+            self._get(
+                '/'.join([self.url, 'repos', self.user, self.repo, 'contents', file]),
+                payload={'ref': 'feature/code'},
+                headers={'Accept': 'application/vnd.github.v3.raw'},
+                text=True
+            )
+        )[0]
 
-    def create_label(self, name, color, description):
-        """Create label."""
+    def get_issue_labels(self, number):
+        """Get issue labels."""
 
-        self._post(
-            '/'.join([self.url, 'repos', self.user, self.repo, 'labels']),
-            {'name': name, 'color': color, 'description': description},
-            201
+        return list(
+            self._get(
+                '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels']),
+                pages=True,
+                headers={'Accept': 'application/vnd.github.symmetra-preview+json'}
+            )
         )
 
-    def add_labels(self, number, labels):
+    def add_issue_labels(self, number, labels):
         """Add labels."""
 
         self._post(
             '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels']),
-            {'labels': list(labels)}
+            {'labels': labels},
+            headers={'Accept': 'application/vnd.github.symmetra-preview+json'}
         )
 
-    def remove_labels(self, number, labels):
+    def remove_issue_labels(self, number, labels):
         """Remove labels."""
 
         for label in labels:
             self._delete(
-                '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels', label])
+                '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels', label]),
+                headers={'Accept': 'application/vnd.github.symmetra-preview+json'}
             )
 
     def get(self, url):
         """Get the url."""
 
-        return list(self._get(url))[0]
+        return list(self._get(url, headers={'Accept': 'application/vnd.github.v3+json'}))[0]
 
 
 class GhLabeler:
@@ -187,16 +199,23 @@ class GhLabeler:
 
         self.debug = debug
         self.git = git
+        config = self._get_config(config)
         self._setup_flags(config)
         self.labels = config['labels']
         with codecs.open(os.getenv('GITHUB_EVENT_PATH'), 'r', encoding='utf-8') as f:
             workflow = json.loads(f.read())
         self.workflow = workflow
 
+    def _get_config(self, config):
+        """Get config."""
+
+        print('Reading labels from {}'.format(config))
+        return yaml.load(self.git.get_contents(config), Loader=Loader)
+
     def _setup_flags(self, config):
         """Setup flags."""
 
-        self.flags = glob.GLOBSTAR | glob.DOTGLOB | glob.NEGATE | glob.SPLIT
+        self.flags = glob.GLOBSTAR | glob.DOTGLOB | glob.NEGATE | glob.SPLIT | glob.NEGATEALL
         if config.get('brace_expansion', False):
             self.flags |= glob.BRACE
         if config.get('extended_glob', False):
@@ -226,38 +245,52 @@ class GhLabeler:
         """Update issue labels."""
 
         number = str(self.workflow['number'])
-        labels = set([l['name'].lower() for l in self.workflow['pull_request']['labels']])
+        labels = set([l['name'].lower() for l in self.git.get_issue_labels(number)])
 
         if remove_labels:
-            remove = labels - remove_labels
+            remove = []
+            seen = set()
+            for name in remove_labels:
+                low = name.lower()
+                if low in labels and low not in seen:
+                    remove.append(name)
+                seen.add(low)
             if remove:
-                self.git.remove_labels(number, remove)
+                self.git.remove_issue_labels(number, remove)
         if add_labels:
-            # repo_labels = set([l['name'].lower() for l in self.git.get_labels()])
-            # missing = add_labels - repo_labels
-            # for m in missing:
-            #     self.git.create_label(m, '00ff00', '')
-            self.git.add_labels(number, add_labels)
+            self.git.add_issue_labels(number, list(add_labels))
 
     def apply(self):
         """Sync labels."""
 
-        managed_labels = set()
         add_labels = set()
+        i_add_labels = set()
+        seen = set()
 
         for file in self._get_changed_files():
             for label in self.labels:
-                managed_labels.add(label['name'].lower())
+                name = label['name']
+                low = name.lower()
                 match = False
                 for pattern in label['patterns']:
                     if glob.globmatch(file, pattern, flags=self.flags):
                         match = True
                         break
                 if match:
-                    add_labels.add(label['name'].lower())
+                    if low not in add_labels:
+                        add_labels.add(name)
+                        i_add_labels.add(low)
                     break
 
-        remove_labels = managed_labels - add_labels
+        remove_labels = set()
+        i_remove_labels = set()
+        for label in self.labels:
+            name = label['name']
+            low = name.lower()
+            if low not in i_add_labels and low not in i_remove_labels:
+                remove_labels.add(name)
+                i_remove_labels.add(low)
+
         self._update_issue_labels(add_labels, remove_labels)
 
 
@@ -284,11 +317,8 @@ def main():
     if not token:
         raise ValueError('No token provided')
 
-    # Parse label file
-    labels = os.getenv("INPUT_FILE", '.github/labeler.yml')
-    print('Reading labels from {}'.format(labels))
-    with codecs.open(labels, 'r', encoding='utf-8') as f:
-        config = yaml.load(f.read(), Loader=Loader)
+    # Get label file
+    config = os.getenv("INPUT_FILE", '.github/labeler.yml')
 
     # Sync the labels
     git = Api(token, user, repo)
