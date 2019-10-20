@@ -14,7 +14,7 @@ try:
 except ImportError:
     from yaml import Loader
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 
 class Api:
@@ -220,6 +220,8 @@ class GhLabeler:
             self.flags |= glob.BRACE
         if config.get('extended_glob', False):
             self.flags |= glob.EXTGLOB | glob.MINUSNEGATE
+        if config.get('case_insensitive', False):
+            self.flags |= glob.IGNORECASE
 
     def _validate_str(self, name):
         """Validate name."""

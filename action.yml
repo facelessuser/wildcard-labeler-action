@@ -11,7 +11,7 @@ inputs:
     required: false
     default: '.github/labeler.yml'
   debug:
-    description: 'Debug will run the label syncer without applying changes. Set to "enable" to enable.'
+    description: 'Debug.'
     required: false
     default: 'disable'
 runs:
