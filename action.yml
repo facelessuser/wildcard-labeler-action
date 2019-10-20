@@ -1,4 +1,4 @@
-name: 'GitHub Wildcard Labeler'
+name: 'Wildcard Labeler'
 author: 'Isaac Muse'
 description: 'Labels pull requests based on the whether the changed file paths match a set of wildcard patterns'
 inputs:
