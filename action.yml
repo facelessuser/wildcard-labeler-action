@@ -11,7 +11,7 @@ inputs:
     required: false
     default: '.github/labeler.yml'
   debug:
-    description: 'Debug.'
+    description: 'Debug will run the auto labeler without applying changes for debug purposes. Set to "enable" to enable.'
     required: false
     default: 'disable'
 runs:
