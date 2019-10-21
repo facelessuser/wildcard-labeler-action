@@ -14,7 +14,7 @@ try:
 except ImportError:
     from yaml import Loader
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 
 class Api:
@@ -79,8 +79,8 @@ class Api:
         except Exception:
             raise RuntimeError('PATCH command failed: {}'.format(command))
 
-    def _post(self, command, payload, timeout=60, expected=200, headers=None):
-        """Send a POST REST command."""
+    def _put(self, command, payload, timeout=60, expected=200, headers=None):
+        """Send a PUT REST command."""
 
         if timeout == 0:
             timeout = None
@@ -95,7 +95,7 @@ class Api:
             headers['content-type'] = 'application/json'
 
         try:
-            resp = requests.post(
+            resp = requests.put(
                 command,
                 data=payload,
                 headers=headers,
@@ -105,7 +105,7 @@ class Api:
             assert resp.status_code == expected
 
         except Exception:
-            raise RuntimeError('POST command failed: {}'.format(command))
+            raise RuntimeError('PUT command failed: {}'.format(command))
 
     def _get(self, command, payload=None, timeout=60, pages=False, expected=200, headers=None, text=False):
         """Send a GET REST request."""
@@ -165,25 +165,14 @@ class Api:
             )
         )
 
-    def add_issue_labels(self, number, labels):
-        """Add labels."""
+    def update_issue_labels(self, number, labels):
+        """Update the issue's labels."""
 
-        self._post(
+        self._put(
             '/'.join([self.url, 'repos', self.user, self.repo, 'issues', number, 'labels']),
             {'labels': labels},
             headers={'Accept': 'application/vnd.github.symmetra-preview+json'}
         )
-
-    def remove_issue_labels(self, number, labels):
-        """Remove labels."""
-
-        for label in labels:
-            self._delete(
-                '/'.join(
-                    [self.url, 'repos', self.user, self.repo, 'issues', number, 'labels',  urllib.parse.quote(label)]
-                ),
-                headers={'Accept': 'application/vnd.github.symmetra-preview+json'}
-            )
 
     def get(self, url):
         """Get the url."""
@@ -247,28 +236,30 @@ class GhLabeler:
         """Update issue labels."""
 
         number = str(self.workflow['number'])
-        labels = set([l['name'].lower() for l in self.git.get_issue_labels(number)])
-
-        if remove_labels:
-            remove = []
-            seen = set()
-            for name in remove_labels:
-                low = name.lower()
-                if low in labels and low not in seen:
-                    remove.append(name)
-                seen.add(low)
-            if remove:
-                self.git.remove_issue_labels(number, remove)
-        if add_labels:
-            self.git.add_issue_labels(number, list(add_labels))
+        labels = []
+        changed = False
+        for label in self.git.get_issue_labels(number):
+            name = label['name']
+            low = name.lower()
+            if low not in remove_labels:
+                labels.append(name)
+                if low in add_labels:
+                    del add_labels[low]
+            else:
+                changed = True
+        new_labels = [label for label in add_labels.values()]
+        if new_labels:
+            changed = True
+            labels.extend(new_labels)
+        if changed:
+            print('UPDATE: ' + str(labels))
+            if not self.debug:
+                self.git.update_issue_labels(number, labels)
 
     def apply(self):
         """Sync labels."""
 
-        add_labels = set()
-        i_add_labels = set()
-        seen = set()
-
+        add_labels = {}
         for file in self._get_changed_files():
             for label in self.labels:
                 names = label['labels']
@@ -280,20 +271,17 @@ class GhLabeler:
                         break
                 if match:
                     for index, low in enumerate(lows):
-                        if low not in i_add_labels:
-                            add_labels.add(names[index])
-                            i_add_labels.add(low)
+                        if low not in add_labels:
+                            add_labels[low] = names[index]
                     break
 
-        remove_labels = set()
-        i_remove_labels = set()
+        remove_labels = {}
         for label in self.labels:
             names = label['labels']
             lows = [n.lower() for n in names]
             for index, low in enumerate(lows):
-                if low not in i_add_labels and low not in i_remove_labels:
-                    remove_labels.add(names[index])
-                    i_remove_labels.add(low)
+                if low not in add_labels and low not in remove_labels:
+                    remove_labels[low] = names[index]
 
         self._update_issue_labels(add_labels, remove_labels)
 
