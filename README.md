@@ -3,6 +3,8 @@
 
 # Wildcard Labeler Action
 
+This repo is being Archived as this functionality (along with various fixes) has been pulled into our own bot: https://github.com/facelessuser/label-bot.
+
 ## Overview
 
 Wildcard Labeler is a GitHub action that labels pull requests based on file patterns of changed files. It uses the
